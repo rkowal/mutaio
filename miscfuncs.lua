@@ -382,7 +382,7 @@ function list_dir(path, options)
   return coroutine.wrap(function()
     -- As Lua doesn't have library options for that use shell one.
     -- TODO eliminate this dependency
-    local dirio = io.popen("ls -l" .. (recursively and "R " or " ") .. path)
+    local dirio = io.popen("ls -l --time-style=long-iso " .. (recursively and "-R " or "") .. path)
     if dirio then
       -- Assume that if dirname in ls output will not be found then just use
       -- starting path.
