@@ -1,6 +1,6 @@
 ------------------------------------------------------------------------------
 -- (c) 2011 Radosław Kowalski <rk@bixbite.pl>                               --
--- mutaio "MUltiple TAble IO" module v0.1                                   --
+-- mutaio "MUltiple TAble IO" module v0.11                                  --
 -- Licensed under the same terms as Lua (MIT license).                      --
 ------------------------------------------------------------------------------
 

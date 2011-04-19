@@ -3,6 +3,6 @@
 ------------------------------------------------------------------------------
 
 Major issues:
-  * get rid of (not sane) "bash dependencies" in miscfuncs.lua
-    (will allow for portability and improve speed too)
   * improve performance when writing entries using techniques like bundling
+	(a bit less pending after using lfs mutaio_examples perform 2.5 times
+	faster)

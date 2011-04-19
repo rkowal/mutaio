@@ -1,15 +1,15 @@
 ------------------------------------------------------------------------------
 -- (c) 2011 Radosław Kowalski <rk@bixbite.pl>                               --
--- miscellaneous functions module v0.3                                      --
+-- miscellaneous functions module v0.4                                      --
 -- Licensed under the same terms as Lua (MIT license).                      --
 ------------------------------------------------------------------------------
 
-module(... or "mutaio", package.seeall)
+module(..., package.seeall)
 
 -- socket isn't used now
 --require"socket"
 require"curl"
-
+require"lfs"
 
 
 -- Lua's reserved words
@@ -99,7 +99,7 @@ end
 -- @param url The url address of page to be downloaded and returned.
 -- @return String containing HTML content of a web page.
 --         nil if it couldn't be finished.
-function load_url_wget(url)
+local function load_url_wget(url)
   assert(type(url) == "string", "url parameter should be string!")
   local html
   local tmpname = os.tmpname()
@@ -121,7 +121,7 @@ end
 -- @return String containing HTML content of a web page.
 --         nil if it couldn't be finished.
 -- NOT USED NOW
---function load_url_socket(url)
+--local function load_url_socket(url)
 --  assert(type(url) == "string", "url parameter should be string!")
 --
 --  local host, path = string.match(string.gsub(url, '^http://', ""), '^(.-)(/.*)$')
@@ -143,7 +143,7 @@ end
 -- @param url The url address of page to be downloaded and returned.
 -- @return String containing HTML content of a web page.
 --         nil if it couldn't be finished.
-function load_url_curl(url)
+local function load_url_curl(url)
   assert(type(url) == "string", "url parameter should be string!")
 
   local res = {}
@@ -351,7 +351,7 @@ end
 --- Return file type at the given path.
 -- @param path to a file to be checked for
 -- @return a nil if file isn't found, "f" if it's a file, "d" if it's a directory
-function filename_type(path)
+local function filename_type_shell(path)
   assert(type(path) == "string", "path must be a string!")
 
   -- TODO eliminate file command dependency
@@ -370,28 +370,56 @@ function filename_type(path)
 end
 
 
+--- Return file type at the given path.
+-- @param path to a file to be checked for
+-- @return a nil if file isn't found, "f" if it's a file, "d" if it's a directory
+local function filename_type_lfs(path)
+  assert(type(path) == "string", "path must be a string!")
+
+  local atr = lfs.attributes(path)
+  if atr then
+	if atr.mode == "file" then
+	  return "f"
+	elseif atr.mode == "directory" then
+	  return "d"
+	end
+  end
+end
+
+-- Set filename_type to use lfs version for now.
+filename_type = filename_type_lfs
+
+
 --- Just return file length.
 -- @param path a path to the file
 -- @return file length in bytes or nil if it couldn't be found
 function file_lenght(path)
   assert(type(path) == "string", "path must be a string!")
 
-  local f = io.open(path, "r")
-  if f then
-    local size = f:seek("end")
-    f:close()
-    return size
+  -- using lfs from now
+  local atr = lfs.attributes(path)
+  if atr and atr.mode == "file" then
+	return atr.size
   end
+
+-- Previous file lenght done using seeking an end.
+--  local f = io.open(path, "r")
+--  if f then
+--    local size = f:seek("end")
+--    f:close()
+--    return size
+--  end
+  return nil
 end
 
 
---- Iterates over files located in path specified directory. Global like characters "*" and "?" supported. They should be entered in file name part and will be used only when matching file names only (don't have any effect on directories).
+--- Iterates over files located in path specified directory. Global like characters "*" and "?" supported. They should be entered in file name part and will be used only when matching file names only (don't have any effect on directories). This is shell based version.
 -- @param path a path to a directory
 -- @param options there actually two additional supported options (case insensitive):
 --                "r" - list recursively
 --                "i" - returns a table containing detailed file information 
 -- @return iterator returning filenames in arbitrary order
-function list_dir(path, options)
+local function list_dir_shell(path, options)
   assert(type(path) == "string", "path must be a string!")
   options = options or ""
   assert(type(options) == "string", "mode must be a string when specified!")
@@ -461,6 +489,80 @@ function list_dir(path, options)
     end
   end)
 end
+
+
+--- Iterates over files located in path specified directory. Global like characters "*" and "?" supported. They should be entered in file name part and will be used only when matching file names only (don't have any effect on directories). This the new lfs based version
+-- @param path a path to a directory
+-- @param options there actually two additional supported options (case insensitive):
+--                "r" - list recursively
+--                "i" - returns a table containing detailed file information 
+-- @return iterator returning filenames in arbitrary order
+local function list_dir_lfs(path, options)
+  assert(type(path) == "string", "path must be a string!")
+  options = options or ""
+  assert(type(options) == "string", "mode must be a string when specified!")
+
+  -- check if a table with detailed file info has to returned
+  local fullinfo = string.match(options, "[iI]") and true or false
+  -- check if directory listing has to work recursively
+  local recursively = string.match(options, "[rR]") and true or false
+  local globpat
+
+  -- Check if there are global ("*" and "?") characters in a path?
+  do
+    -- split path into two parts where the latter is the last
+    local p, lastpart = string.match(path, '^(.-)([^/]+)$')
+    -- Check if there was a lone name specified it wasn't a directory.
+    if (p == nil or #p == 0 or p == "./") and filename_type(path) == "d" then
+      p = path
+      lastpart = nil
+    end
+    -- it's enough to have lastpart only to consider it as glob pattern
+    if lastpart then
+      -- substitute glob character to pattern ones
+      globpat = string.gsub(lastpart, '.', function(c)
+        if c == "*" then return '.-'
+        elseif c == '?' then return '.'
+        else return escape_magic_chars(c) end
+      end)
+      -- pattern should be anchored for both sides
+      globpat = "^" .. globpat .. "$"
+      -- effectively trim path from the last part being used as glob
+      path = p
+    end
+  end
+
+  function dir_rec(p)
+	p = p or path
+	for name in lfs.dir(p) do
+	  if name ~= "." and name ~= ".." then
+		local fullpath = join_paths(p, name)
+		local atr = lfs.attributes(fullpath)
+		if atr then
+		  local info
+		  if fullinfo then
+			info = {mode = nil, hardlinks = atr.nlink, user = atr.uid, group = atr.gid,
+							  size = atr.size, date = nil, time = nil, filename = name,
+							  isdir = atr.mode == "directory", dirname = p}
+		  else
+			info = fullpath
+		  end
+
+		  if atr.mode == "file" and (globpat == nil and true or string.match(name, globpat)) then
+			coroutine.yield(info)
+		  elseif recursively and atr.mode == "directory" then
+			dir_rec(fullpath)
+		  end
+		end
+	  end
+	end
+  end
+
+  return coroutine.wrap(dir_rec)
+end
+
+-- Set list_dir to lfs based version.
+list_dir = list_dir_lfs
 
 
 --- Generate randomized table based on provided template.

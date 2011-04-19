@@ -1,5 +1,5 @@
 ------------------------------------------------------------------------------
--- README for 0.1 version                                                   --
+-- README for 0.11 version                                                  --
 ------------------------------------------------------------------------------
 
 Mutaio stands for MUltiple TAble IO. Basically it implements ways of saving,
@@ -24,8 +24,13 @@ in empty table constructors.
 Multiple entries iterators may be used at the same time however mixing in
 writes to the same location will generate (obviously) erroneous results.
 
-Writing itself is kind of slow but it should be easy to fix. (by bundling
-entries and reducing "bash dependencies" in miscfuncs.lua ;)
+
+-- Dependencies --------------------------------------------------------------
+
+  * Lua curl module with easy interface
+  * Lua file system module
+
+------------------------------------------------------------------------------
 
 
 For feedback, criticism or ideas please write to: rk@bixbite.pl
