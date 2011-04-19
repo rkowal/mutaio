@@ -4,7 +4,12 @@
 -- Licensed under the same terms as Lua (MIT license).                      --
 ------------------------------------------------------------------------------
 
-module(..., package.seeall)
+module(... or "mutaio", package.seeall)
+
+-- socket isn't used now
+--require"socket"
+require"curl"
+
 
 
 -- Lua's reserved words
@@ -17,6 +22,19 @@ setmetatable(RESERVED_WORDS, {
     end
   end
 })
+
+
+--- Splits a path into parts in table. The slash ("/") character is used as delimiter.
+-- @param path a path to be split into parts
+function split_path(path)
+  assert(type(path) == "string", "s must be a string!")
+
+  local reslist = {}
+  for part in string.gmatch(path, '([^/]+)') do
+    table.insert(reslist, part)
+  end
+  return reslist
+end
 
 
 --- Try to determine if given string is url link.
@@ -77,24 +95,16 @@ function dir(t, trimto, noprint)
 end
 
 
--- Put table constructor instead of nil to enable caching for load_url.
-local cache_load_url = nil
-
---- Download and return (usually it'll be HTML) url content.
--- Just do as in a title. For now a external program (wget) is used
--- for that.
+--- Download and return (usually it'll be HTML) url content. For now a external program (wget) is used for that.
 -- @param url The url address of page to be downloaded and returned.
 -- @return String containing HTML content of a web page.
 --         nil if it couldn't be finished.
-function load_url(url)
-  -- add some simple memoizing... (was useful for testing)
-  if cache_load_url and cache_load_url[url] then return cache_load_url[url] end
---  print("load_url:", url)
+function load_url_wget(url)
   assert(type(url) == "string", "url parameter should be string!")
   local html
   local tmpname = os.tmpname()
   if tmpname then
-    -- TODO eliminate this wget depedency
+    -- For "free wget" version use load_url_curl instead.
     if os.execute("wget -q '"..url.."' --output-document="..tmpname) == 0 then
       local f = io.open(tmpname, "r")
       html = f:read("*a")
@@ -102,9 +112,57 @@ function load_url(url)
     end
   end
   os.remove(tmpname)
-  if cache_load_url then cache_load_url[url] = html end
   return html
 end
+
+
+--- Download and return (usually it'll be HTML) url content. This version uses Lua socket module.
+-- @param url The url address of page to be downloaded and returned.
+-- @return String containing HTML content of a web page.
+--         nil if it couldn't be finished.
+-- NOT USED NOW
+--function load_url_socket(url)
+--  assert(type(url) == "string", "url parameter should be string!")
+--
+--  local host, path = string.match(string.gsub(url, '^http://', ""), '^(.-)(/.*)$')
+--  local t = socket.tcp()
+--  if t then
+--	t:connect(host, 80)
+--	t:send("GET " .. path .. " HTTP/1.0\r\n\r\n")
+--	local res = {}
+--	repeat
+--	  local data, status = t:receive(2 ^ 10)
+--	  table.insert(res, data)
+--	until data == nil or status == "closed"
+--	return table.concat(res)
+--  end
+--end
+
+
+--- Download and return (usually it'll be HTML) url content. This version uses Lua curl module.
+-- @param url The url address of page to be downloaded and returned.
+-- @return String containing HTML content of a web page.
+--         nil if it couldn't be finished.
+function load_url_curl(url)
+  assert(type(url) == "string", "url parameter should be string!")
+
+  local res = {}
+  local ec = curl.easy_init()
+  ec:setopt(curl.OPT_URL, url)
+  ec:setopt(curl.OPT_ENCODING, "utf8")
+--  ec:setopt(curl.OPT_PORT, 80)
+  ec:setopt(curl.OPT_FOLLOWLOCATION, 1)
+  ec:setopt(curl.OPT_WRITEFUNCTION, function(s)
+	table.insert(res, s)
+	return #s
+  end)
+  ec:perform()
+  return table.concat(res)
+end
+
+-- Set load_url to use curl version for now as load_url_curl works as well as
+-- wget does.
+load_url = load_url_curl
 
 
 --- Converts table to Lua source (serialize). Inner tables are supported. Cycles should get resolved in a literal way.
@@ -206,17 +264,6 @@ function escape_magic_chars(s)
 end
 
 
---- Splits a path into parts in table. The slash ("/") character is used as delimiter.
--- @param path a path to be split into parts
-function split_path(path)
-  assert(type(path) == "string", "s must be a string!")
-
-  local reslist = {}
-  for part in string.gmatch(path, '([^/]+)') do
-    table.insert(reslist, part)
-  end
-  return reslist
-end
 
 
 --- Try to extract a filename part from a path.
